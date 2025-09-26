@@ -1,0 +1,16 @@
+[project]
+name = "implementations"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "graphviz>=0.21",
+    "numpy>=2.3.3",
+    "pytest>=8.4.2",
+    "tiktoken>=0.11.0",
+    "torch>=2.8.0",
+    "torchdata>=0.11.0",
+    "torchtext>=0.6.0",
+    "torchview>=0.2.7",
+    "transformers>=4.56.1",
+]
