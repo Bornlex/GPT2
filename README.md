@@ -1,5 +1,18 @@
 # GPT
 
+## Run
+
+First install uv dependencies :
+```bash
+uv sync
+```
+
+Then simply run :
+
+```bash
+uv run python training.py
+```
+
 ## Resources
 
 ### GPT architecture
