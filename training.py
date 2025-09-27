@@ -99,7 +99,7 @@ def train(gpt_model: nn.Module, training_config: TrainingConfig, batch_size: int
                 block_size, training_config.eval_iters, batch_size
             )
 
-            input_sentence = 'First Citizen:\n'
+            input_sentence = 'FIRST CITIZEN:\n'
             gpt_model.eval()
             with torch.no_grad():
                 generation = gpt_model.generate(input_sentence, max_tokens=125, temperature=0.9)

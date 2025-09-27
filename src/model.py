@@ -3,7 +3,7 @@ import torch
 from torch import nn
 
 from src import utils
-from src.attention import MultiHeadAttention, Attention
+from src.attention import MultiHeadAttention, MultiQueryAttention
 from src.ffn import FFN
 from src.gpt_config import GPTConfig
 from src.normalization import LayerNorm
@@ -14,7 +14,7 @@ class GPTBlock(nn.Module):
     def __init__(self, embedding_size: int, n_head: int, hidden_size: int, dropout: float):
         super().__init__()
 
-        self.__attention = MultiHeadAttention(embedding_size, n_head)
+        self.__attention = MultiQueryAttention(embedding_size, n_head)
         self.__norm1 = LayerNorm(embedding_size)
         self.__fc = FFN(embedding_size, hidden_size, embedding_size, dropout)
         self.__norm2 = LayerNorm(embedding_size)

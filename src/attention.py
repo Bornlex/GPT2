@@ -71,8 +71,6 @@ class Attention(nn.Module):
     - dk
     - dq (= dk)
     - dv
-
-    We omit the batch when defining the model
     """
     def __init__(self, embedding_size: int, dk: int):
         super().__init__()
@@ -95,14 +93,13 @@ class Attention(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, embedding_size: int, n_heads: int, masked: bool = False):
+    def __init__(self, embedding_size: int, n_heads: int):
         assert embedding_size % n_heads == 0
 
         super().__init__()
 
         self.__embedding_size = embedding_size
         self.__number_heads = n_heads
-        self.__masked = masked
 
         self.__qkv = nn.Linear(
             self.__embedding_size,
@@ -126,3 +123,61 @@ class MultiHeadAttention(nn.Module):
         result = self.__fc(scaled)
 
         return result
+
+
+class MultiQueryAttention(nn.Module):
+    def __init__(self, embedding_size: int, n_heads: int):
+        assert embedding_size % n_heads == 0
+
+        super().__init__()
+
+        self.__embedding_size = embedding_size
+        self.__number_heads = n_heads
+        self.__head_dimension = self.__embedding_size // self.__number_heads
+
+        self.__qkv = nn.Linear(
+            self.__embedding_size,
+            self.__embedding_size + 2 * self.__head_dimension
+        )
+        self.__fc = nn.Linear(self.__embedding_size, self.__embedding_size)
+
+        self.mask = self.register_buffer('mask', None)
+
+    def forward(self, x, *args, **kwargs):
+        qkv = self.__qkv(x)
+        queries, keys, values = torch.split(qkv, [self.__embedding_size, self.__head_dimension, self.__head_dimension], -1)
+
+        queries = queries.view(x.shape[0], x.shape[1], self.__number_heads, self.__head_dimension)
+        keys = keys.unsqueeze(2).repeat(1, 1, queries.shape[2], 1)
+        values = values.unsqueeze(2).repeat(1, 1, queries.shape[2], 1)
+
+        scaled = self.scaled_dot_product(keys, queries, values)
+        scaled = scaled.view(x.shape[0], x.shape[1], self.__embedding_size)
+
+        result = self.__fc(scaled)
+
+        return result
+
+    def scaled_dot_product(self, keys, queries, values):
+        b, n, h, d2 = keys.shape
+        x = torch.matmul(
+            queries.reshape((b, h, n, d2)),
+            keys.reshape((b, h, n, d2)).transpose(-1, -2)
+        )
+
+        if self.mask is None or self.mask.shape[-1] != x.shape[-1]:
+            self.mask = self.create_causal_mask(x)
+
+        x = torch.masked_fill(x, mask=self.mask, value=-torch.inf)
+        x /= keys.shape[-1] ** 0.5
+        x = torch.softmax(x, -1)
+        x = torch.matmul(x, values.reshape((b, h, n, d2)))
+        x = x.reshape((b, n, h, d2))
+
+        return x
+
+    def create_causal_mask(self, x: torch.Tensor):
+        mask = torch.ones_like(x, dtype=torch.bool)
+        mask = torch.triu(mask, diagonal=1)
+
+        return mask
