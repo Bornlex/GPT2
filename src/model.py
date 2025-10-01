@@ -81,6 +81,9 @@ class GPT(nn.Module):
         self.device = device
         super().to(device, *args, **kwargs)
 
+    def save_weights(self, weights_path: str = None):
+        torch.save(self.state_dict(), weights_path)
+
 
 if __name__ == '__main__':
     model = GPT(GPTConfig())

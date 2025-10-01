@@ -1,10 +1,10 @@
 n_layers = 6
-n_head = 8
-n_embd = 768
+n_head = 6
+n_embd = 384
 vocab_size = 65
 dropout = 0.2
 
-batch_size = 128
+batch_size = 64
 block_size = 256  # context window
 
 learning_rate = 1e-4

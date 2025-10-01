@@ -1,3 +1,4 @@
+import argparse
 from dataclasses import dataclass
 import numpy as np
 import os
@@ -21,6 +22,17 @@ class TrainingConfig:
     eval_iters: int
     log_interval: int
     weight_decay: float
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Train a GPT model on Shakespeare dataset')
+    parser.add_argument('--save', action='store_true', help='Flag to save the trained model.')
+    parser.add_argument('--resume', action='store_true', help='Whether to resume training from checkpoint.')
+    parser.add_argument('--save_path', type=str, default='model.pth', help='Path to save the trained model.')
+    parser.add_argument('--resume_path', type=str, default='checkpoint.pth', help='Path to save the checkpointed model.')
+    args = parser.parse_args()
+
+    return args
 
 
 def get_batch(batch_size: int, block_size: int, device: str, split: str = 'train'):
@@ -58,7 +70,7 @@ def estimate_loss(gpt_model, loss_fn, get_batch_fn, device, block_size, eval_ite
     return sum(losses) / len(losses)
 
 
-def train(gpt_model: nn.Module, training_config: TrainingConfig, batch_size: int, block_size: int):
+def train(gpt_model: nn.Module, training_config: TrainingConfig, batch_size: int, block_size: int, checkpoint_path: str = None):
     device = 'mps' if torch.mps.is_available() else 'cpu'
 
     optimizer = torch.optim.AdamW(
@@ -76,6 +88,10 @@ def train(gpt_model: nn.Module, training_config: TrainingConfig, batch_size: int
 
     gpt_model.to(device)
     gpt_model.train()
+
+    best_val_loss = float('inf')
+    no_improve_count = 0
+    patience = 5
 
     for iteration in range(training_config.max_iters):
         x, y = get_batch(batch_size, block_size, device, 'train')
@@ -104,12 +120,27 @@ def train(gpt_model: nn.Module, training_config: TrainingConfig, batch_size: int
             with torch.no_grad():
                 generation = gpt_model.generate(input_sentence, max_tokens=125, temperature=0.9)
             gpt_model.train()
-            print(f'loss : {loss.item():.4f} -- val_loss : {val_loss:.4f} -- {generation}')
+            print(f'[{iteration}|{training_config.max_iters}] loss : {loss.item():.4f} -- val_loss : {val_loss:.4f} -- {generation}')
+
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                no_improve_count = 0
+            else:
+                no_improve_count += 1
+
+            if no_improve_count >= patience:
+                print(f'Early stopping at iteration {iteration}')
+                break
+
+            if checkpoint_path is not None:
+                gpt_model.save_weights(checkpoint_path)
 
     return gpt_model
 
 
 if __name__ == '__main__':
+    arguments = parse_args()
+
     conf = TrainingConfig(
         lr=config.learning_rate,
         lr_decay_iters=config.lr_decay_iters,
@@ -129,12 +160,20 @@ if __name__ == '__main__':
         n_embd=config.n_embd,
         vocab_size=config.vocab_size,
         dropout=config.dropout,
+        ffn_hidden_size=config.n_embd * 4
     )
     model = GPT(model_config)
+
+    if arguments.resume and os.path.isfile(arguments.resume_path):
+        model.load_state_dict(torch.load(arguments.resume_path))
 
     model = train(
         model,
         conf,
         config.batch_size,
-        config.block_size
+        config.block_size,
+        arguments.resume_path
     )
+
+    if arguments.save:
+        model.save_weights(arguments.save_path)
