@@ -13,4 +13,5 @@ dependencies = [
     "torchtext>=0.6.0",
     "torchview>=0.2.7",
     "transformers>=4.56.1",
+    "wandb>=0.22.1",
 ]

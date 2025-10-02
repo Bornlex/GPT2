@@ -91,7 +91,7 @@ def train(gpt_model: nn.Module, training_config: TrainingConfig, batch_size: int
 
     best_val_loss = float('inf')
     no_improve_count = 0
-    patience = 5
+    patience = 10
 
     for iteration in range(training_config.max_iters):
         x, y = get_batch(batch_size, block_size, device, 'train')
@@ -122,6 +122,12 @@ def train(gpt_model: nn.Module, training_config: TrainingConfig, batch_size: int
             gpt_model.train()
             print(f'[{iteration}|{training_config.max_iters}] loss : {loss.item():.4f} -- val_loss : {val_loss:.4f} -- {generation}')
 
+            if checkpoint_path is not None:
+                gpt_model.save_weights(checkpoint_path)
+
+            if val_loss > 2:
+                continue
+
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 no_improve_count = 0
@@ -131,9 +137,6 @@ def train(gpt_model: nn.Module, training_config: TrainingConfig, batch_size: int
             if no_improve_count >= patience:
                 print(f'Early stopping at iteration {iteration}')
                 break
-
-            if checkpoint_path is not None:
-                gpt_model.save_weights(checkpoint_path)
 
     return gpt_model
 

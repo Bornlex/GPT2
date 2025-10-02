@@ -141,38 +141,39 @@ class MultiQueryAttention(nn.Module):
         )
         self.__fc = nn.Linear(self.__embedding_size, self.__embedding_size)
 
-        self.mask = self.register_buffer('mask', None)
+        self.register_buffer('mask', None)
 
     def forward(self, x, *args, **kwargs):
         qkv = self.__qkv(x)
         queries, keys, values = torch.split(qkv, [self.__embedding_size, self.__head_dimension, self.__head_dimension], -1)
 
         queries = queries.view(x.shape[0], x.shape[1], self.__number_heads, self.__head_dimension)
-        keys = keys.unsqueeze(2).repeat(1, 1, queries.shape[2], 1)
-        values = values.unsqueeze(2).repeat(1, 1, queries.shape[2], 1)
+        keys = keys.unsqueeze(2)
+        values = values.unsqueeze(2)
 
         scaled = self.scaled_dot_product(keys, queries, values)
-        scaled = scaled.view(x.shape[0], x.shape[1], self.__embedding_size)
+        scaled = scaled.reshape(x.shape[0], x.shape[1], self.__embedding_size)
 
         result = self.__fc(scaled)
 
         return result
 
     def scaled_dot_product(self, keys, queries, values):
-        b, n, h, d2 = keys.shape
+        b, n, h, d2 = queries.shape
         x = torch.matmul(
-            queries.reshape((b, h, n, d2)),
-            keys.reshape((b, h, n, d2)).transpose(-1, -2)
-        )
+            queries.transpose(1, 2),
+            keys.transpose(1, 2).transpose(-1, -2)
+        ) / (d2 ** 0.5)
 
-        if self.mask is None or self.mask.shape[-1] != x.shape[-1]:
-            self.mask = self.create_causal_mask(x)
+        if self.training:
+            if self.mask is None or self.mask.shape[-1] != x.shape[-1]:
+                self.mask = self.create_causal_mask(x)
 
-        x = torch.masked_fill(x, mask=self.mask, value=-torch.inf)
-        x /= keys.shape[-1] ** 0.5
+            x = torch.masked_fill(x, mask=self.mask, value=-torch.inf)
+
         x = torch.softmax(x, -1)
-        x = torch.matmul(x, values.reshape((b, h, n, d2)))
-        x = x.reshape((b, n, h, d2))
+        x = torch.matmul(x, values.transpose(1, 2))
+        x = x.transpose(1, 2)
 
         return x
 
