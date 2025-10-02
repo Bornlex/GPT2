@@ -6,7 +6,7 @@ class ScaledDotProduct(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.mask = self.register_buffer('mask', None)
+        self.register_buffer('mask', None)
 
     def create_causal_mask(self, inputs: torch.Tensor):
         mask = torch.ones_like(inputs, dtype=torch.bool)
@@ -15,13 +15,14 @@ class ScaledDotProduct(nn.Module):
         return mask
 
     def forward(self, keys, queries, values):
-        x = torch.matmul(queries, keys.transpose(-1, -2))  # (b, n, n)
+        x = torch.matmul(queries, keys.transpose(-1, -2)) / (keys.shape[-1] ** 0.5)
 
-        if self.mask is None or self.mask.shape[-1] != x.shape[-1]:
-            self.mask = self.create_causal_mask(x)
+        if self.training:
+            if self.mask is None or self.mask.shape[-1] != x.shape[-1]:
+                self.mask = self.create_causal_mask(x)
 
-        x = torch.masked_fill(x, mask=self.mask, value=-torch.inf)
-        x /= keys.shape[-1] ** 0.5
+            x = torch.masked_fill(x, mask=self.mask, value=-torch.inf)
+
         x = torch.softmax(x, -1)
         x = torch.matmul(x, values)
 
@@ -32,7 +33,7 @@ class ScaledDotProductMHA(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.mask = self.register_buffer('mask', None)
+        self.register_buffer('mask', None)
 
     def create_causal_mask(self, inputs: torch.Tensor):
         mask = torch.ones_like(inputs, dtype=torch.bool)
@@ -45,13 +46,14 @@ class ScaledDotProductMHA(nn.Module):
         x = torch.matmul(
             queries.reshape((b, h, n, d2)),
             keys.reshape((b, h, n, d2)).transpose(-1, -2)
-        )
+        ) / (d2 ** 0.5)
 
-        if self.mask is None or self.mask.shape[-1] != x.shape[-1]:
-            self.mask = self.create_causal_mask(x)
+        if self.training:
+            if self.mask is None or self.mask.shape[-1] != x.shape[-1]:
+                self.mask = self.create_causal_mask(x)
 
-        x = torch.masked_fill(x, mask=self.mask, value=-torch.inf)
-        x /= keys.shape[-1] ** 0.5
+            x = torch.masked_fill(x, mask=self.mask, value=-torch.inf)
+
         x = torch.softmax(x, -1)
         x = torch.matmul(x, values.reshape((b, h, n, d2)))
         x = x.reshape((b, n, h, d2))
