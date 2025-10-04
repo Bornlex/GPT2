@@ -1,6 +1,6 @@
 n_layers = 6
 n_head = 6
-n_embd = n_head * 32
+n_embd = n_head * 64
 vocab_size = 65
 dropout = 0.2
 

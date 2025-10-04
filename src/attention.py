@@ -6,7 +6,7 @@ class ScaledDotProduct(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.register_buffer('mask', None)
+        self.register_buffer('mask', None, persistent=False)
 
     def create_causal_mask(self, inputs: torch.Tensor):
         mask = torch.ones_like(inputs, dtype=torch.bool)
@@ -32,7 +32,7 @@ class ScaledDotProductMHA(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.register_buffer('mask', None)
+        self.register_buffer('mask', None, persistent=False)
 
     def create_causal_mask(self, inputs: torch.Tensor):
         mask = torch.ones_like(inputs, dtype=torch.bool)
@@ -126,7 +126,7 @@ class MultiHeadAttention(nn.Module):
 
 
 class MultiQueryAttention(nn.Module):
-    def __init__(self, embedding_size: int, n_heads: int):
+    def __init__(self, embedding_size: int, n_heads: int, dropout: float = 0.2):
         assert embedding_size % n_heads == 0
 
         super().__init__()
@@ -140,8 +140,9 @@ class MultiQueryAttention(nn.Module):
             self.__embedding_size + 2 * self.__head_dimension
         )
         self.__fc = nn.Linear(self.__embedding_size, self.__embedding_size)
+        self.__dropout = nn.Dropout(dropout)
 
-        self.register_buffer('mask', None)
+        self.register_buffer('mask', None, persistent=False)
 
     def forward(self, x, *args, **kwargs):
         qkv = self.__qkv(x)
@@ -155,6 +156,7 @@ class MultiQueryAttention(nn.Module):
         scaled = scaled.reshape(x.shape[0], x.shape[1], self.__embedding_size)
 
         result = self.__fc(scaled)
+        result = self.__dropout(result)
 
         return result
 
