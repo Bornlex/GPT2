@@ -4,6 +4,7 @@ import numpy as np
 import os
 import torch
 from torch import nn
+import wandb
 
 import config
 from src.gpt_config import GPTConfig
@@ -30,6 +31,7 @@ def parse_args():
     parser.add_argument('--resume', action='store_true', help='Whether to resume training from checkpoint.')
     parser.add_argument('--save_path', type=str, default='model.pth', help='Path to save the trained model.')
     parser.add_argument('--resume_path', type=str, default='checkpoint.pth', help='Path to save the checkpointed model.')
+    parser.add_argument('--wandb_project', type=str, default='gpt2', help='Name of the Weights & Biases project.')
     args = parser.parse_args()
 
     return args
@@ -89,14 +91,9 @@ def train(gpt_model: nn.Module, training_config: TrainingConfig, batch_size: int
     gpt_model.to(device)
     gpt_model.train()
 
-    best_val_loss = float('inf')
-    no_improve_count = 0
-    patience = 10
-
     for iteration in range(training_config.max_iters):
         x, y = get_batch(batch_size, block_size, device, 'train')
         x = x.to(device)
-        # y = torch.nn.functional.one_hot(y, gpt_model.config.vocab_size).to(device=device, dtype=torch.float32)
         y = y.to(device, dtype=torch.long)
 
         prediction = gpt_model(x)
@@ -109,34 +106,18 @@ def train(gpt_model: nn.Module, training_config: TrainingConfig, batch_size: int
         optimizer.step()
         scheduler.step()
 
-        if iteration % 10 == 0:
-            val_loss = estimate_loss(
-                gpt_model, loss_fn, get_batch, device,
-                block_size, training_config.eval_iters, batch_size
-            )
+        wandb.log({"train/loss": loss.item(), "iteration": iteration, "lr": optimizer.param_groups[0]['lr']})
 
+        if iteration % 10 == 0:
             input_sentence = 'FIRST CITIZEN:\n'
             gpt_model.eval()
             with torch.no_grad():
                 generation = gpt_model.generate(input_sentence, max_tokens=125, temperature=0.9)
             gpt_model.train()
-            print(f'[{iteration}|{training_config.max_iters}] loss : {loss.item():.4f} -- val_loss : {val_loss:.4f} -- {generation}')
+            print(f'[{iteration}|{training_config.max_iters}] loss : {loss.item():.4f} -- {generation}')
 
             if checkpoint_path is not None:
                 gpt_model.save_weights(checkpoint_path)
-
-            if val_loss > 2:
-                continue
-
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                no_improve_count = 0
-            else:
-                no_improve_count += 1
-
-            if no_improve_count >= patience:
-                print(f'Early stopping at iteration {iteration}')
-                break
 
     return gpt_model
 
@@ -169,6 +150,14 @@ if __name__ == '__main__':
 
     if arguments.resume and os.path.isfile(arguments.resume_path):
         model.load_state_dict(torch.load(arguments.resume_path))
+
+    run = wandb.init(
+        project=arguments.wandb_project,
+        name='gpt2-shakespeare',
+        config={
+            "learning_rate": conf.lr,
+        },
+    )
 
     model = train(
         model,

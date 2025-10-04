@@ -1,13 +1,13 @@
 n_layers = 6
 n_head = 6
-n_embd = 384
+n_embd = n_head * 16
 vocab_size = 65
 dropout = 0.2
 
 batch_size = 64
 block_size = 256  # context window
 
-learning_rate = 1e-4
+learning_rate = 1e-3
 max_iters = 5000
 lr_decay_iters = 5000
 min_lr = learning_rate / 10

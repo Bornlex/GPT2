@@ -17,11 +17,10 @@ class ScaledDotProduct(nn.Module):
     def forward(self, keys, queries, values):
         x = torch.matmul(queries, keys.transpose(-1, -2)) / (keys.shape[-1] ** 0.5)
 
-        if self.training:
-            if self.mask is None or self.mask.shape[-1] != x.shape[-1]:
-                self.mask = self.create_causal_mask(x)
+        if self.mask is None or self.mask.shape[-1] != x.shape[-1]:
+            self.mask = self.create_causal_mask(x)
 
-            x = torch.masked_fill(x, mask=self.mask, value=-torch.inf)
+        x = torch.masked_fill(x, mask=self.mask, value=-torch.inf)
 
         x = torch.softmax(x, -1)
         x = torch.matmul(x, values)
@@ -48,11 +47,10 @@ class ScaledDotProductMHA(nn.Module):
             keys.reshape((b, h, n, d2)).transpose(-1, -2)
         ) / (d2 ** 0.5)
 
-        if self.training:
-            if self.mask is None or self.mask.shape[-1] != x.shape[-1]:
-                self.mask = self.create_causal_mask(x)
+        if self.mask is None or self.mask.shape[-1] != x.shape[-1]:
+            self.mask = self.create_causal_mask(x)
 
-            x = torch.masked_fill(x, mask=self.mask, value=-torch.inf)
+        x = torch.masked_fill(x, mask=self.mask, value=-torch.inf)
 
         x = torch.softmax(x, -1)
         x = torch.matmul(x, values.reshape((b, h, n, d2)))
@@ -167,11 +165,10 @@ class MultiQueryAttention(nn.Module):
             keys.transpose(1, 2).transpose(-1, -2)
         ) / (d2 ** 0.5)
 
-        if self.training:
-            if self.mask is None or self.mask.shape[-1] != x.shape[-1]:
-                self.mask = self.create_causal_mask(x)
+        if self.mask is None or self.mask.shape[-1] != x.shape[-1]:
+            self.mask = self.create_causal_mask(x)
 
-            x = torch.masked_fill(x, mask=self.mask, value=-torch.inf)
+        x = torch.masked_fill(x, mask=self.mask, value=-torch.inf)
 
         x = torch.softmax(x, -1)
         x = torch.matmul(x, values.transpose(1, 2))
