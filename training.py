@@ -31,7 +31,7 @@ def parse_args():
     parser.add_argument('--resume', action='store_true', help='Whether to resume training from checkpoint.')
     parser.add_argument('--save_path', type=str, default='model.pth', help='Path to save the trained model.')
     parser.add_argument('--resume_path', type=str, default='checkpoint.pth', help='Path to save the checkpointed model.')
-    parser.add_argument('--wandb_project', type=str, default='gpt2', help='Name of the Weights & Biases project.')
+    parser.add_argument('--wandb_project', type=str, default='gpt2-shakespeare', help='Name of the Weights & Biases project.')
     args = parser.parse_args()
 
     return args
@@ -153,7 +153,7 @@ if __name__ == '__main__':
 
     run = wandb.init(
         project=arguments.wandb_project,
-        name='gpt2-shakespeare',
+        name=f'l{config.n_layers}-h{config.n_head}-d{config.n_embd}',
         config={
             "learning_rate": conf.lr,
         },
