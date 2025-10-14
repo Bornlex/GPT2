@@ -1,16 +1,21 @@
+import numpy as np
+import os
 import pytest
 import torch
 
+import config
 from src.attention import MultiHeadAttention
 from src.gpt_config import GPTConfig
 from src.normalization import LayerNorm
 from src.model import GPT
 from src.positional import PositionalEmbedding
+from src import utils
 
 
 torch.manual_seed(42)
-
+current_directory = os.path.dirname(os.path.abspath(__file__))
 GPT2_EMBEDDING_DIMENSION = 768
+DEVICE = 'mps' if torch.backends.mps.is_available() else 'cpu'
 
 
 @pytest.fixture()
@@ -23,6 +28,28 @@ def random_tensor():
     - d : the embedding dimension
     """
     return torch.rand((1, 5, 3)) * 2 - 1
+
+
+@pytest.fixture()
+def gpt_model():
+    model_config = GPTConfig(
+        block_size=config.block_size,
+        n_layer=config.n_layers,
+        n_head=config.n_head,
+        n_embd=config.n_embd,
+        vocab_size=config.vocab_size,
+        dropout=config.dropout,
+        ffn_hidden_size=config.n_embd * 4
+    )
+
+    checkpoint_path = os.path.join(current_directory, 'checkpoint.pth')
+
+    model = GPT(model_config)
+    model.to(DEVICE)
+    model.eval()
+    model.load_state_dict(torch.load(checkpoint_path, map_location=DEVICE), strict=False)
+
+    return model
 
 
 def test_positional_embedding_shape(random_tensor):
@@ -88,3 +115,15 @@ def test_parameters_on_gpu():
     )
     gpt_model = GPT(model_config)
     gpt_model.to('mps')
+
+
+def test_kv_cache(gpt_model):
+    encoder, decoder = utils.get_encoder_decoder()
+
+    prompt = 'I shall declare '
+
+    encoded = encoder(prompt)
+    encoded = np.array(encoded)
+    indices = torch.from_numpy(encoded.astype(np.int64)).view(1, encoded.shape[0]).to(DEVICE)
+
+    kv_cache = [{'k': None, 'v': None} for _ in range(config.n_layers)]

@@ -81,7 +81,7 @@ class Attention(nn.Module):
         self.__qkv = nn.Linear(self.__d, 2 * self.__dk + self.__d)
         self.__scaled_dot_product = ScaledDotProduct()
 
-    def forward(self, x, *args, **kwargs):
+    def forward(self, x, kv_cache: dict | None = None, *args, **kwargs):
         """
         inputs (n, d)
         """
@@ -108,7 +108,7 @@ class MultiHeadAttention(nn.Module):
         self.__scaled_dot_product = ScaledDotProductMHA()
         self.__fc = nn.Linear(self.__embedding_size, self.__embedding_size)
 
-    def forward(self, x, *args, **kwargs):
+    def forward(self, x, kv_cache: dict | None = None, *args, **kwargs):
         qkv = self.__qkv(x)
         queries, keys, values = torch.split(qkv, [self.__embedding_size] * 3, -1)
 
@@ -144,37 +144,48 @@ class MultiQueryAttention(nn.Module):
 
         self.register_buffer('mask', None, persistent=False)
 
-    def forward(self, x, *args, **kwargs):
+    def forward(self, x, kv_cache: dict | None = None, *args, **kwargs):
         qkv = self.__qkv(x)
         queries, keys, values = torch.split(qkv, [self.__embedding_size, self.__head_dimension, self.__head_dimension], -1)
 
-        queries = queries.view(x.shape[0], x.shape[1], self.__number_heads, self.__head_dimension)
+        if kv_cache is not None:
+            if kv_cache.get('k') is not None:
+                keys = torch.cat((kv_cache['k'], keys), dim=1)
+                values = torch.cat((kv_cache['v'], values), dim=1)
+
+            kv_cache['k'] = keys
+            kv_cache['v'] = values
+
+        queries = queries.view(queries.shape[0], queries.shape[1], self.__number_heads, self.__head_dimension)
         keys = keys.unsqueeze(2)
         values = values.unsqueeze(2)
 
-        scaled = self.scaled_dot_product(keys, queries, values)
-        scaled = scaled.reshape(x.shape[0], x.shape[1], self.__embedding_size)
+        use_causal_mask = x.shape[1] > 1
+
+        scaled = self.scaled_dot_product(keys, queries, values, use_causal_mask=use_causal_mask)
+        scaled = scaled.reshape(queries.shape[0], queries.shape[1], self.__embedding_size)
 
         result = self.__fc(scaled)
         result = self.__dropout(result)
 
-        return result
+        return result, kv_cache
 
-    def scaled_dot_product(self, keys, queries, values):
+    def scaled_dot_product(self, keys, queries, values, use_causal_mask: bool = True):
         b, n, h, d2 = queries.shape
         x = torch.matmul(
             queries.transpose(1, 2),
             keys.transpose(1, 2).transpose(-1, -2)
         ) / (d2 ** 0.5)
 
-        if self.mask is None or self.mask.shape[-1] != x.shape[-1]:
-            self.mask = self.create_causal_mask(x)
+        if use_causal_mask:
+            if self.mask is None or self.mask.shape[-1] != x.shape[-1]:
+                self.mask = self.create_causal_mask(x)
 
-        x = torch.masked_fill(x, mask=self.mask, value=-torch.inf)
+            x = torch.masked_fill(x, mask=self.mask, value=-torch.inf)
 
         x = torch.softmax(x, -1)
         x = torch.matmul(x, values.transpose(1, 2))
-        x = x.transpose(1, 2)
+        x = x.transpose(1, 2).contiguous()
 
         return x
 

@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+import time
 import torch
 
 import config
@@ -27,6 +28,12 @@ def parse_args():
         type=int,
         default=256,
         help='Maximum number of tokens to generate'
+    )
+    parser.add_argument(
+        '--use_kv_cache',
+        action='store_true',
+        default=False,
+        help='Enable KV cache for faster generation (if supported by the model)'
     )
 
     return parser.parse_args()
@@ -129,15 +136,20 @@ def main():
                 
                 print(f"\n🤖 Generating...")
                 print("-" * 30)
+
+                start = time.time()
                 
                 generated_text = model.generate(
                     user_input,
                     max_tokens=max_tokens,
-                    temperature=temperature
+                    temperature=temperature,
+                    use_kv_cache=arguments.use_kv_cache
                 )
 
+                end = time.time()
+
                 print(generated_text)
-                print("-" * 30)
+                print("-" * 30 + f"⏱️  Generated in {end - start:.2f} seconds")
 
             except KeyboardInterrupt:
                 print("\n\n👋 Interrupted by user. Goodbye!")

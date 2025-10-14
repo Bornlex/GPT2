@@ -3,7 +3,7 @@ import torch
 from torch import nn
 
 from src import utils
-from src.attention import MultiHeadAttention, MultiQueryAttention
+from src.attention import MultiQueryAttention
 from src.ffn import FFN
 from src.gpt_config import GPTConfig
 from src.normalization import LayerNorm
@@ -19,13 +19,14 @@ class GPTBlock(nn.Module):
         self.__fc = FFN(embedding_size, hidden_size, embedding_size, dropout)
         self.__norm2 = LayerNorm(embedding_size)
 
-    def forward(self, x, *args, **kwargs):
-        dx1 = self.__attention(x)
-        x = self.__norm1(x + dx1)
+    def forward(self, x, kv_cache: dict | None = None):
+        x = self.__norm1(x)
+        dx1, kv_cache = self.__attention(x, kv_cache=kv_cache)
+        x = self.__norm2(x + dx1)
         dx2 = self.__fc(x)
-        x = self.__norm2(x + dx2)
+        x = x + dx2
 
-        return x
+        return x, kv_cache
 
 
 class GPT(nn.Module):
@@ -43,30 +44,44 @@ class GPT(nn.Module):
         ])
         self.__fc = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
-    def forward(self, x, *args, **kwargs):
+    def forward(self, x, kv_cache: list | None = None, start_pos: int = 0):
         x = self.__embedding(x)
-        positional_x = self.__positional_embedding(x)
+        positional_x = self.__positional_embedding(x, start_pos=start_pos)
         x = x + positional_x
 
-        for block in self.__blocks:
-            x = block(x)
+        for i, block in enumerate(self.__blocks):
+            current_kv_cache = kv_cache[i] if kv_cache else None
+            x, current_kv_cache = block(x, kv_cache=current_kv_cache)
+
+            if kv_cache is not None:
+                kv_cache[i] = current_kv_cache
 
         x = self.__fc(x)
 
-        return x
+        return x, kv_cache
 
-    def generate(self, sentence: str, max_tokens: int = 256, temperature: float = 1.0) -> str:
+    def generate(self, sentence: str, max_tokens: int = 256, temperature: float = 1.0, use_kv_cache: bool = False) -> str:
         encoder, decoder = utils.get_encoder_decoder()
 
         encoded = encoder(sentence)
         encoded = np.array(encoded)
         indices = torch.from_numpy(encoded.astype(np.int64)).view(1, encoded.shape[0]).to(self.device)
 
+        if use_kv_cache:
+            kv_cache = [{'k': None, 'v': None} for _ in range(self.config.n_layer)]
+        else:
+            kv_cache = None
+
         self.eval()
         with torch.no_grad():
-            for _ in range(max_tokens):
-                indices_cond = indices if indices.shape[1] <= self.config.block_size else indices[:, -self.config.block_size:]
-                logits = self(indices_cond)
+            for index in range(max_tokens):
+                if index == 0 or not use_kv_cache:
+                    indices_cond = indices if indices.shape[1] <= self.config.block_size else indices[:, -self.config.block_size:]
+                    logits, kv_cache = self(indices_cond, kv_cache=kv_cache, start_pos=0)
+                else:
+                    indices_cond = indices[:, -1:].to(self.device)
+                    logits, kv_cache = self(indices_cond, kv_cache=kv_cache, start_pos=indices.shape[1] - 1)
+
                 logits = logits[:, -1, :] / temperature
                 probabilities = torch.nn.functional.softmax(logits, dim=-1)
                 next_index = torch.multinomial(probabilities, num_samples=1)

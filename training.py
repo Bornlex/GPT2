@@ -96,7 +96,7 @@ def train(gpt_model: nn.Module, training_config: TrainingConfig, batch_size: int
         x = x.to(device)
         y = y.to(device, dtype=torch.long)
 
-        prediction = gpt_model(x)
+        prediction, _ = gpt_model(x)
         b, n, c = prediction.shape
 
         loss = loss_fn(prediction.view(b * n, c), y.view(b * n))

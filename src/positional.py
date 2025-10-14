@@ -8,11 +8,11 @@ class PositionalEmbedding(nn.Module):
 
         self.__embedding_size = embedding_size
 
-    def forward(self, x, *args, **kwargs):
+    def forward(self, x: torch.Tensor, start_pos: int = 0):
         mask = torch.zeros_like(x)
 
-        for pos in range(x.shape[1]):
-            mask[:, pos, :] = pos
+        for pos in range(start_pos, start_pos + x.shape[1]):
+            mask[:, pos - start_pos, :] = pos
 
         for index in range(x.shape[-1]):
             mask[:, :, index] /= (10000 ** (2 * index / self.__embedding_size))
